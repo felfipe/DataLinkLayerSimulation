@@ -2,7 +2,7 @@
 #define CRCPOLI 63
 #define CHAR_LENGTH 8
 #define BUFFER_LENGTH 2080
-#define ERROR_CHANCHE 80
+#define ERROR_CHANCE 80
 Device::Device(bool parityMethod) {
     this->parityMethod = parityMethod;
     return;
@@ -41,7 +41,12 @@ void Device::byteToBit(std::string &msg, bool *&data, int &length) {
 void Device::PhysicalLayerSimulation(bool buffer[]) {
     int errorChance = ERROR_CHANCE;
     bool changedBuffer[BUFFER_LENGTH];
-    for (int i = 0;) {
+    for (int i = 0; i <= BUFFER_LENGTH; i++) {
+        if (rand() % 100 >= ERROR_CHANCE) {
+            //sucesso
+        } else {
+            //falha
+        }
     }
 }
 void Device::calculateCRC(bool *buffer, int dataLength) {
