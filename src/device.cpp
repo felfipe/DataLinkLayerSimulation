@@ -25,10 +25,16 @@ void Device::sendData(std::string message) {
     return;
 }
 
+void Device::insertStopFlag(bool *buffer, int &length) {
+}
+
+void Device::recvData() {
+}
+
 void Device::byteToBit(std::string &msg, bool *&data, int &length) {
     int dataLength = msg.length();
     length = dataLength * CHAR_LENGTH;
-    data = new bool(length);
+    data = new bool(BUFFER_LENGTH);
     for (int i = 0; i < dataLength; i++) {
         char word;
         word = msg.at(i);
@@ -42,18 +48,17 @@ void Device::PhysicalLayerSimulation(bool buffer[]) {
     int errorChance = ERROR_CHANCE;
     bool changedBuffer[BUFFER_LENGTH];
     for (int i = 0; i <= BUFFER_LENGTH; i++) {
-        if (rand() % 100 >= ERROR_CHANCE) {
-            //sucesso
-        } else {
-            //falha
+        if (rand() % 100 < ERROR_CHANCE) {
+            //erro
+            buffer[i] = !buffer[i];
         }
     }
 }
-void Device::calculateCRC(bool *buffer, int dataLength) {
-    bool result[dataLength + 32];  //array utilizado para operações de calculo do CRC
+bool *Device::calculateCRC(bool *buffer, int length, bool *&CRC) {
+    bool result[length + 32];  //array utilizado para operações de calculo do CRC
     //Startando array de calculo do CRC
-    for (int i = 0; i <= dataLength + 32; i++) {
-        if (i < dataLength) {
+    for (int i = 0; i <= length + 32; i++) {
+        if (i < length) {
             result[i] = buffer[i];
         } else {
             result[i] = false;
@@ -67,9 +72,9 @@ void Device::calculateCRC(bool *buffer, int dataLength) {
         poli[i] = true;
     }
     //Calculo do CRC
-    for (int j = 0; j < dataLength; j++) {
+    for (int j = 0; j < length; j++) {
         if (result[j]) {
-            for (int i = 0; i + j < dataLength + 32; i++) {
+            for (int i = 0; i + j < length + 32; i++) {
                 if (i <= 32) {
                     currentBit = result[i + j] != poli[i];
                 } else {
@@ -79,19 +84,34 @@ void Device::calculateCRC(bool *buffer, int dataLength) {
             }
         }
     }
+    CRC = new bool(32);
+    for (int i = 0; i < 32; i++) {
+        CRC[i] = result[length + i];
+    }
+}
+void Device::insertCRC(bool *buffer, int &dataLength) {
+    bool *CRC;
+    calculateCRC(buffer, dataLength, CRC);
     //Adicionando o CRC no BUffer da Mensagem
     for (int i = 0; i < 32; i++) {
-        buffer[dataLength] = result[dataLength + i];
+        buffer[dataLength] = CRC[i];
     }
+    dataLength += 32;
     //return &result[dataLength];
 }
-
+bool Device::checkCRC(bool *buffer, int length) {
+    bool *receivedCRC = &buffer[length];
+    bool *CRC;
+    calculateCRC(buffer, length, CRC);
+    for (int i = 0; i < 32; i++) {
+    }
+}
 /*
 check Parity
 0 - OK
 1 - WRONG
 */
-int Device::checkParity(bool *buffer, int length) {
+bool Device::checkParity(bool *buffer, int length) {
     int bits = countBits(buffer, length);
     bool parityBit = bits % 2;
     if (this->parityMethod == EVEN)  // EVEN OR ODD METHOD PARITY?
@@ -113,8 +133,9 @@ int Device::countBits(bool *data, int length) {
     return count;
 }
 
-void Device::insertParity(bool *buffer, int length) {
+void Device::insertParity(bool *buffer, int &length) {
     int parityBit = checkParity(buffer, length);
+    length += 1;
     buffer[length] = parityBit;
     return;
 }
