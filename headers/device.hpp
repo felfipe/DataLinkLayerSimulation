@@ -4,6 +4,9 @@
 #include <string.h>
 
 #include <iostream>
+#include <thread>
+
+#include "../headers/socketHandler.hpp"
 #define EVEN 0  // 0 for pair parity check, 1 for odd parity check
 #define ODD 1
 #define CRC_SIZE 32
@@ -26,6 +29,7 @@ class Device {
     bool *flag;
     bool parityMethod;
     int id;
+    socketHandler *socket;
     buffer *recv_buffer;
     buffer *send_buffer;
     void byteToBit(std::string &msg);
@@ -39,11 +43,12 @@ class Device {
     bool checkParity(bool buffer[], int length);
 
    public:
-    Device(bool parityMethod);
+    std::thread recv_thread, send_thread;
+    Device(bool parityMethod, bool METHOD, int PORT);
     void recvACK();
     void listenData();
     void sendData(std::string msg);
-    void recvData(bool *recv_buffer);
+    void recvData();
     void sendACK(bool is_ack);
     void PhysicalLayerSimulation();
     void senderDataLinkLayer(bool data[]);

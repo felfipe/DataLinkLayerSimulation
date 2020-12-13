@@ -1,8 +1,10 @@
 #include "../headers/device.hpp"
 
-Device::Device(bool parityMethod) {
+Device::Device(bool parityMethod, bool METHOD, int PORT) {
     this->id = 0;
     this->parityMethod = parityMethod;
+
+    /* DEFINE FLAGS */
     this->flag = (bool *)calloc(8, sizeof(bool));
     this->ACK = (bool *)calloc(8, sizeof(bool));
     this->NACK = (bool *)calloc(8, sizeof(bool));
@@ -32,13 +34,22 @@ Device::Device(bool parityMethod) {
     this->NACK[5] = 1;
     this->NACK[6] = 1;
     this->NACK[7] = 0;
+    /* ***** */
 
+    /* DEFINE BUFFERS */
     this->recv_buffer = (buffer *)calloc(1, sizeof(buffer));
     this->send_buffer = (buffer *)calloc(1, sizeof(buffer));
     recv_buffer->buffer_data = (bool *)calloc(BUFFER_LENGTH, sizeof(bool));
     send_buffer->buffer_data = (bool *)calloc(BUFFER_LENGTH, sizeof(bool));
     this->CRC = (bool *)calloc(CRC_SIZE, sizeof(bool));
-    return;
+    /* ***** */
+
+    /* DEFINE SOCKET */
+    this->socket = new socketHandler(PORT, METHOD);
+
+    /* DEFINE THREADS */
+    send_thread = std::thread(&Device::listenData, this);
+    recv_thread = std::thread(&Device::recvData, this);
 }
 
 void Device::recvACK() {
@@ -48,12 +59,14 @@ void Device::recvACK() {
 }
 
 void Device::listenData() {
-    std::string message;
-    std::cout << "[DEV " << this->id << " LISTENER] Type your message: " << std::endl;
+    while (1) {
+        std::string message;
+        std::cout << "[DEV " << this->id << " LISTENER] Type your message: " << std::endl;
 
-    std::cin >> message;
-
-    sendData(message);
+        std::cin >> message;
+        sendData(message);
+    }
+    return;
 }
 
 void Device::sendData(std::string message) {
@@ -64,19 +77,35 @@ void Device::sendData(std::string message) {
     insertStopFlag(send_buffer->buffer_data, send_buffer->length);
     insertCRC();
     insertParity();
+    std::cout << "\033[1;31m";
     for (int i = 0; i < this->send_buffer->length; i++) {
+        if (i == this->send_buffer->length - 42)
+            std::cout << "\033[1;32m";
+        if (i == this->send_buffer->length - 33)
+            std::cout << "\033[1;33m";
+        if (i == this->send_buffer->length - 1)
+            std::cout << "\033[1;34m";
         if (i % 8 == 0)
             std::cout << " ";
         std::cout << this->send_buffer->buffer_data[i];
     }
-    std::cout << std::endl;
+    std::cout << "\033[0m" << std::endl;
+    std::cout << "Data sent (physical interference): " << std::endl;
     PhysicalLayerSimulation();
+    std::cout << "\033[1;31m";
     for (int i = 0; i < this->send_buffer->length; i++) {
+        if (i == this->send_buffer->length - 42)
+            std::cout << "\033[1;32m";
+        if (i == this->send_buffer->length - 33)
+            std::cout << "\033[1;33m";
+        if (i == this->send_buffer->length - 1)
+            std::cout << "\033[1;34m";
         if (i % 8 == 0)
             std::cout << " ";
         std::cout << this->send_buffer->buffer_data[i];
     }
-    std::cout << std::endl;
+    std::cout << "\033[0m" << std::endl;
+    this->socket->sendSocket(this->send_buffer->buffer_data, this->send_buffer->length);
     return;
 }
 void Device::sendACK(bool is_ack) {
@@ -96,32 +125,43 @@ void Device::sendACK(bool is_ack) {
     PhysicalLayerSimulation();
     return;
 }
-void Device::recvData(bool *recv_buffer) {
-    for (int i = 0; i < BUFFER_LENGTH; i++)
-        this->recv_buffer->buffer_data[i] = recv_buffer[i];
-    this->recv_buffer->length = 0;
-    removeStopFlag(this->recv_buffer->buffer_data, this->recv_buffer->length);
-    if (checkParity(this->recv_buffer->buffer_data, this->recv_buffer->length)) {
-        removeParity();
-        if (checkCRC(this->recv_buffer->buffer_data, this->recv_buffer->length)) {
-            char data_char[BUFFER_LENGTH / 8];
-            removeCRC();
-            memset(data_char, '\0', BUFFER_LENGTH / 8);
-            bitToChar(this->recv_buffer, data_char);
-            std::cout << data_char;
+void Device::recvData() {
+    while (1) {
+        this->socket->recvSocket(recv_buffer->buffer_data, recv_buffer->length);
+        std::cout << "DATA RECIVED:" << std::endl;
+        std::cout << "\033[1;31m";  // RED
+        for (int i = 0; i < this->recv_buffer->length; i++) {
+            if (i == this->recv_buffer->length - 42)
+                std::cout << "\033[1;32m";
+            if (i == this->recv_buffer->length - 33)
+                std::cout << "\033[1;33m";
+            if (i == this->recv_buffer->length - 1)
+                std::cout << "\033[1;34m";
+            if (i % 8 == 0)
+                std::cout << " ";
+            std::cout << this->recv_buffer->buffer_data[i];
+        }
+        std::cout << "\033[0m" << std::endl;
+        this->recv_buffer->length = 0;
+        std::cout << std::endl;
+        removeStopFlag(this->recv_buffer->buffer_data, this->recv_buffer->length);
+        if (checkParity(this->recv_buffer->buffer_data, this->recv_buffer->length)) {
+            removeParity();
+            if (checkCRC(this->recv_buffer->buffer_data, this->recv_buffer->length)) {
+                char data_char[BUFFER_LENGTH / 8];
+                removeCRC();
+                memset(data_char, '\0', BUFFER_LENGTH / 8);
+                bitToChar(this->recv_buffer, data_char);
+                std::cout << "PAYLOAD: " << data_char << std::endl;
+            } else {
+                std::cout << "ERRO CRC";
+                // ERRO
+            }
+
         } else {
-            std::cout << "ERRO CRC";
+            std::cout << "ERRO Parity";
             // ERRO
         }
-
-    } else {
-        std::cout << "ERRO Parity";
-        // ERRO
-    }
-    for (int i = 0; i < this->recv_buffer->length; i++) {
-        if (i % 8 == 0)
-            std::cout << " ";
-        std::cout << this->recv_buffer->buffer_data[i];
     }
     return;
 }
@@ -266,7 +306,7 @@ void Device::PhysicalLayerSimulation() {
         }
     }
 }
-void Device::calculateCRC(bool *buffer, int length, bool *CRC) {
+void Device::calculateCRC(bool *buffer, int length, bool *CRC_p) {
     bool result[length + 32];  //array utilizado para operações de calculo do CRC
     //Startando array de calculo do CRC
     for (int i = 0; i < length + 32; i++) {
@@ -297,7 +337,7 @@ void Device::calculateCRC(bool *buffer, int length, bool *CRC) {
         }
     }
     for (int i = 0; i < 32; i++) {
-        CRC[i] = result[length + i];
+        CRC_p[i] = result[length + i];
     }
 }
 //11111111111111111101111101011111
@@ -314,7 +354,7 @@ void Device::insertCRC() {
 }
 bool Device::checkCRC(bool *buffer, int length) {
     bool *receivedCRC = &buffer[length - 32];  //CRC que foi recebido
-    bool *CRC;                                 //Variavel que armazena o CRC calculado
+    bool CRC[32];                              //Variavel que armazena o CRC calculado
     calculateCRC(buffer, length - 32, CRC);    //Calcula o CRC
     bool response = true;                      //Variavel de retorno, verifica se os CRC bateram
     for (int i = 0; i < 32; i++) {             //Verificando CRC
