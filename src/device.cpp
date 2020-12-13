@@ -3,10 +3,20 @@
 Device::Device(bool parityMethod) {
     this->id = 0;
     this->parityMethod = parityMethod;
+    this->flag = (bool *)calloc(8, sizeof(bool));
+    this->flag[0] = 0;
+    this->flag[1] = 1;
+    this->flag[2] = 0;
+    this->flag[3] = 0;
+    this->flag[4] = 0;
+    this->flag[5] = 0;
+    this->flag[6] = 0;
+    this->flag[7] = 0;
     this->recv_buffer = (buffer *)calloc(1, sizeof(buffer));
     this->send_buffer = (buffer *)calloc(1, sizeof(buffer));
     recv_buffer->buffer_data = (bool *)calloc(BUFFER_LENGTH, sizeof(bool));
     send_buffer->buffer_data = (bool *)calloc(BUFFER_LENGTH, sizeof(bool));
+    this->CRC = (bool *)calloc(CRC_SIZE, sizeof(bool));
     return;
 }
 void Device::listenData() {
@@ -21,10 +31,40 @@ void Device::listenData() {
 void Device::sendData(std::string message) {
     clearBuffer(send_buffer);
     byteToBit(message);
+    this->parity = calculateParity(send_buffer->buffer_data, send_buffer->length);
+    calculateCRC(send_buffer->buffer_data, send_buffer->length, this->CRC);
+    insertStopFlag(send_buffer->buffer_data, send_buffer->length);
     insertCRC();
     insertParity();
-    for (int i = 0; i < send_buffer->length; i++)
-        std::cout << send_buffer->buffer_data[i];
+    for (int i = 0; i < this->send_buffer->length; i++) {
+        if (i % 8 == 0)
+            std::cout << " ";
+        std::cout << this->send_buffer->buffer_data[i];
+    }
+    std::cout << std::endl;
+    return;
+}
+void Device::recvData(bool *recv_buffer) {
+    for (int i = 0; i < BUFFER_LENGTH; i++)
+        this->recv_buffer->buffer_data[i] = recv_buffer[i];
+    this->recv_buffer->length = 0;
+    removeStopFlag(this->recv_buffer->buffer_data, this->recv_buffer->length);
+    if (checkParity(this->recv_buffer->buffer_data, this->recv_buffer->length)) {
+        removeParity();
+        if (checkCRC(this->recv_buffer->buffer_data, this->recv_buffer->length)) {
+            removeCRC();
+        } else {
+            // ERRO
+        }
+
+    } else {
+                // ERRO
+    }
+    for (int i = 0; i < this->recv_buffer->length; i++) {
+        if (i % 8 == 0)
+            std::cout << " ";
+        std::cout << this->recv_buffer->buffer_data[i];
+    }
     return;
 }
 void Device::clearBuffer(buffer *buffer) {
@@ -53,14 +93,22 @@ void Device::insertStopFlag(bool *buffer, int &length) {
         i += flagRelativeOffset + 1;
         flagRelativeOffset = this->findFlag(&buffer[i], length - i);
     }
+    for (int i = 0; i < FLAG_SIZE; i++)
+        buffer[length + i] = this->flag[i];
+    length += FLAG_SIZE;
+
+    buffer[length] = 1;
+    length++;
 }
 void Device::removeStopFlag(bool *buffer, int &length) {
-    bool *bufferData = (bool *)calloc(BUFFER_LENGTH, sizeof(bool));
+    bool bufferData[BUFFER_LENGTH];
+    for (int i = 0; i < BUFFER_LENGTH; i++)
+        bufferData[i] = 0;
     int bufferDataLength = 0;
     for (int i = 0; i < BUFFER_LENGTH; i++) {
         bool isFlag = true;
         for (int j = 0; j < 8; j++) {
-            if (this->flag[i] != buffer[i + j]) {
+            if (this->flag[j] != buffer[i + j]) {
                 isFlag = false;
                 break;
             }
@@ -71,10 +119,16 @@ void Device::removeStopFlag(bool *buffer, int &length) {
                 bufferDataLength++;
                 i++;
             }
-            if (buffer[i + 1]) {
+            if (buffer[i]) {
                 //é um fim
-                buffer = bufferData;
                 length = bufferDataLength - 8;
+                //Insere de volta no pacote o CRC E O BIT PARIDADE
+                for (int j = 0; j < CRC_SIZE + 1; j++) {
+                    bufferData[length + j] = buffer[i + 1 + j];
+                }
+                length += 33;
+                for (int j = 0; j < length; j++)
+                    buffer[j] = bufferData[j];
                 break;
             } else {
                 i++;
@@ -84,6 +138,19 @@ void Device::removeStopFlag(bool *buffer, int &length) {
             bufferDataLength++;
         }
     }
+    return;
+}
+
+void Device::removeCRC() {
+    this->recv_buffer->length -= 32;
+}
+
+bool Device::checkParity(bool buffer[], int length) {
+    bool calculated = calculateParity(buffer, length - 33);
+    if (calculated == buffer[length - 1])
+        return true;
+    else
+        return false;
 }
 
 //Este metodo recebe uma posição no buffer e contanto a partir da posição informada envia a posição da primeira flag encontrada
@@ -94,7 +161,7 @@ int Device::findFlag(bool *buffer, int length) {
         //check if is flag
         bool isFlag = true;
         for (int j = 0; j < 8; j++) {
-            if (this->flag[i] != buffer[i + j]) {
+            if (this->flag[j] != buffer[i + j]) {
                 isFlag = false;
                 break;
             }
@@ -158,28 +225,27 @@ void Device::calculateCRC(bool *buffer, int length, bool *&CRC) {
             }
         }
     }
-    CRC = (bool *)calloc(32, sizeof(bool));
     for (int i = 0; i < 32; i++) {
         CRC[i] = result[length + i];
     }
 }
 void Device::insertCRC() {
-    bool *CRC;
-    calculateCRC(send_buffer->buffer_data, send_buffer->length, CRC);
+    /*     bool *CRC;
+    calculateCRC(send_buffer->buffer_data, send_buffer->length, CRC); */
+
     //Adicionando o CRC no BUffer da Mensagem
-    for (int i = 0; i < 32; i++) {
-        send_buffer->buffer_data[send_buffer->length + i] = CRC[i];
-        std::cout << CRC[i];
+    for (int i = 0; i < CRC_SIZE; i++) {
+        send_buffer->buffer_data[send_buffer->length + i] = this->CRC[i];
     }
-    send_buffer->length += 32;
+    send_buffer->length += CRC_SIZE;
     //return &result[dataLength];
 }
 bool Device::checkCRC(bool *buffer, int length) {
-    bool *receivedCRC = &buffer[length];  //CRC que foi recebido
-    bool *CRC;                            //Variavel que armazena o CRC calculado
-    calculateCRC(buffer, length, CRC);    //Calcula o CRC
-    bool response = true;                 //Variavel de retorno, verifica se os CRC bateram
-    for (int i = 0; i < 32; i++) {        //Verificando CRC
+    bool *receivedCRC = &buffer[length - 32];  //CRC que foi recebido
+    bool *CRC;                                 //Variavel que armazena o CRC calculado
+    calculateCRC(buffer, length - 32, CRC);    //Calcula o CRC
+    bool response = true;                      //Variavel de retorno, verifica se os CRC bateram
+    for (int i = 0; i < 32; i++) {             //Verificando CRC
         if (receivedCRC[i] != CRC[i]) {
             response = false;
         }
@@ -191,7 +257,7 @@ check Parity
 0 - OK
 1 - WRONG
 */
-bool Device::checkParity(bool *buffer, int length) {
+bool Device::calculateParity(bool *buffer, int length) {
     int bits = countBits(buffer, length);
     bool parityBit = bits % 2;
     if (this->parityMethod == EVEN)  // EVEN OR ODD METHOD PARITY?
@@ -211,10 +277,17 @@ int Device::countBits(bool *data, int length) {
     }
     return count;
 }
+void Device::removeParity() {
+    recv_buffer->buffer_data[recv_buffer->length] = 0;
+    recv_buffer->length--;
+    return;
+}
 
 void Device::insertParity() {
-    int parityBit = checkParity(send_buffer->buffer_data, send_buffer->length);
+    send_buffer->buffer_data[send_buffer->length] = this->parity;
     send_buffer->length += 1;
-    send_buffer->buffer_data[send_buffer->length] = parityBit;
     return;
+}
+bool *Device::getBuffer() {
+    return this->send_buffer->buffer_data;
 }
