@@ -2,9 +2,13 @@
 Aplicação desenvolvida com o objetivo de simular a transmissão de dados através da camada de Enlace. A aplicação possui algoritmos de detecção de erros, como o de paridade e o CRC (Check Redudance Cyclic), além de algoritmos de enquadramento para lidar com o fim de uma transmissão. A aplicação também utiliza Threads para simular uma conexão duplex, na qual ambos os hosts se comunicam. 
 ### Compilar
 Para compilar, basta digitar:
+
 `make`
+
 ou então:
+
 `g++ ./src/client.cpp ./src/device.cpp ./src/socketHandler.cpp -lpthread -o client`
+
 `g++ ./src/server.cpp ./src/device.cpp ./src/socketHandler.cpp -lpthread -o server`
 
 ### Executar
