@@ -3,6 +3,9 @@ Aplicação desenvolvida com o objetivo de simular a transmissão de dados atrav
 ### Compilar
 Para compilar, basta digitar:
 `make`
+ou então:
+`g++ ./src/client.cpp ./src/device.cpp ./src/socketHandler.cpp -lpthread -o client`
+`g++ ./src/server.cpp ./src/device.cpp ./src/socketHandler.cpp -lpthread -o server`
 
 ### Executar
 Primeiramente, execute o server na porta dada como argumento:
