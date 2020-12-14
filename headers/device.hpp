@@ -13,7 +13,7 @@
 #define CRCPOLI 63
 #define CHAR_LENGTH 8
 #define BUFFER_LENGTH 2080
-#define ERROR_CHANCE 0.1
+#define ERROR_CHANCE 0
 #define FLAG_SIZE 8
 struct buffer {
     bool *buffer_data;

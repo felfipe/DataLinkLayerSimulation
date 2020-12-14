@@ -17,6 +17,7 @@ Device::Device(bool parityMethod, bool METHOD, int PORT) {
     this->flag[6] = 0;
     this->flag[7] = 0;
 
+    /*
     this->ACK[0] = 1;
     this->ACK[1] = 1;
     this->ACK[2] = 1;
@@ -34,6 +35,7 @@ Device::Device(bool parityMethod, bool METHOD, int PORT) {
     this->NACK[5] = 1;
     this->NACK[6] = 1;
     this->NACK[7] = 0;
+  */
     /* ***** */
 
     /* DEFINE BUFFERS */
@@ -58,10 +60,14 @@ void Device::recvACK() {
     bitToChar(this->recv_buffer, ACK);
 }
 
+/*
+FUNÇÃO COM THREAD
+Essa função constantemente lê um valor do teclado para enviar para outro dispotivo.
+*/
 void Device::listenData() {
     while (1) {
         std::string message;
-        std::cout << "[DEV " << this->id << " LISTENER] Type your message: " << std::endl;
+        std::cout << "\033[1;32m[DEV]\033[0m Type your message: " << std::endl;
 
         std::cin >> message;
         sendData(message);
@@ -69,6 +75,11 @@ void Device::listenData() {
     return;
 }
 
+/*
+Dado uma mensagem, calcula CRC, bit de paridade, lida com a flag,
+simula o meio físico e então envia.
+Cada metodo utilizado aqui é explicado mais a fundo em sua definição.
+*/
 void Device::sendData(std::string message) {
     clearBuffer(send_buffer);
     byteToBit(message);
@@ -108,7 +119,7 @@ void Device::sendData(std::string message) {
     this->socket->sendSocket(this->send_buffer->buffer_data, this->send_buffer->length);
     return;
 }
-void Device::sendACK(bool is_ack) {
+/* void Device::sendACK(bool is_ack) {
     clearBuffer(send_buffer);
     for (int i = 0; i < 8; i++) {
         if (is_ack)
@@ -124,7 +135,15 @@ void Device::sendACK(bool is_ack) {
     insertParity();
     PhysicalLayerSimulation();
     return;
-}
+} */
+
+/*
+FUNÇÃO COM THREAD
+A função aguarda a chegada dos dados pelo socket e trata os dados.
+Primeiramente ela remove a flag, junto com os bits inseridos.
+Então a função compara a paridade e o CRC.
+
+*/
 void Device::recvData() {
     while (1) {
         this->socket->recvSocket(recv_buffer->buffer_data, recv_buffer->length);
@@ -144,6 +163,7 @@ void Device::recvData() {
         std::cout << "\033[0m" << std::endl;
         this->recv_buffer->length = 0;
         std::cout << std::endl;
+
         removeStopFlag(this->recv_buffer->buffer_data, this->recv_buffer->length);
         if (checkParity(this->recv_buffer->buffer_data, this->recv_buffer->length)) {
             removeParity();
@@ -154,27 +174,36 @@ void Device::recvData() {
                 bitToChar(this->recv_buffer, data_char);
                 std::cout << "PAYLOAD: " << data_char << std::endl;
             } else {
-                std::cout << "ERRO CRC";
+                std::cout << "\033[1;37m[ERROR] CRC IS NOT VALID\033[0m";
                 // ERRO
             }
-
         } else {
-            std::cout << "ERRO Parity";
+            std::cout << "\033[1;37m[ERROR] PARITY IS NOT VALID\033[0m";
             // ERRO
         }
     }
     return;
 }
+
+/*
+Limpa um buffer
+*/
 void Device::clearBuffer(buffer *buffer) {
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < BUFFER_LENGTH; i++)
         buffer->buffer_data[i] = 0;
     buffer->length = 0;
     return;
 }
+
+/*
+Função que insere a flag de stop no buffer.
+Também verifica a ocorrência da flag nos dados e insere um 0 após.
+Insere 1 no final da flag de stop, indicando a parada.
+*/
 void Device::insertStopFlag(bool *buffer, int &length) {
     int i = 0;
     int flagRelativeOffset = this->findFlag(&buffer[i], length - i);
-    while (flagRelativeOffset != -1) {
+    while (flagRelativeOffset != -1) {  //enquanto ainda tiverem flags que não são o fim real, inserimos o bit de verificação
         int flagOffset = i + flagRelativeOffset;
         flagOffset += 8;
         bool aux = buffer[flagOffset];
@@ -191,7 +220,7 @@ void Device::insertStopFlag(bool *buffer, int &length) {
         i += flagRelativeOffset + 1;
         flagRelativeOffset = this->findFlag(&buffer[i], length - i);
     }
-    for (int i = 0; i < FLAG_SIZE; i++)
+    for (int i = 0; i < FLAG_SIZE; i++)  //inserindo a flag de fim real e seu bit de checagem 1
         buffer[length + i] = this->flag[i];
     length += FLAG_SIZE;
 
@@ -200,7 +229,7 @@ void Device::insertStopFlag(bool *buffer, int &length) {
 }
 void Device::removeStopFlag(bool *buffer, int &length) {
     bool bufferData[BUFFER_LENGTH];
-    for (int i = 0; i < BUFFER_LENGTH; i++)
+    for (int i = 0; i < BUFFER_LENGTH; i++)  //partindo de cat bit de posição i procuramos uma flag
         bufferData[i] = 0;
     int bufferDataLength = 0;
     for (int i = 0; i < BUFFER_LENGTH; i++) {
@@ -211,12 +240,12 @@ void Device::removeStopFlag(bool *buffer, int &length) {
                 break;
             }
         }
-        if (isFlag) {
+        if (isFlag) {  //encontrad verificamos se ela realmente é o fim ou se faz parte dos dados
             for (int j = 0; j < 8; j++) {
                 bufferData[bufferDataLength] = buffer[i + j];
                 bufferDataLength++;
-                i++;
             }
+            i += 8;
             if (buffer[i]) {
                 //é um fim
                 length = bufferDataLength - 8;
@@ -228,8 +257,6 @@ void Device::removeStopFlag(bool *buffer, int &length) {
                 for (int j = 0; j < length; j++)
                     buffer[j] = bufferData[j];
                 break;
-            } else {
-                i++;
             }
         } else {
             bufferData[bufferDataLength] = buffer[i];
@@ -239,6 +266,10 @@ void Device::removeStopFlag(bool *buffer, int &length) {
     return;
 }
 
+/*
+Função que recebe uma cadeia de bits e converte para uma cadeia de char
+8 bits -> 1 char
+*/
 void Device::bitToChar(buffer *buffer, char *data_char) {
     for (int i = 0; i < buffer->length / 8; i++) {
         char dado = 0;
@@ -257,6 +288,11 @@ void Device::removeCRC() {
     this->recv_buffer->length -= 32;
 }
 
+/*
+Calcula a paridade e coompara com o último bit de um buffer
+false - WRONG
+true  - OK
+*/
 bool Device::checkParity(bool buffer[], int length) {
     bool calculated = calculateParity(buffer, length - 33);
     if (calculated == buffer[length - 1])
@@ -272,7 +308,7 @@ int Device::findFlag(bool *buffer, int length) {
     for (int i = 0; i <= length - 8; i++) {
         //check if is flag
         bool isFlag = true;
-        for (int j = 0; j < 8; j++) {
+        for (int j = 0; j < 8; j++) {  //verifica se contando a partir da posição i temos uma flag de fim
             if (this->flag[j] != buffer[i + j]) {
                 isFlag = false;
                 break;
@@ -284,7 +320,7 @@ int Device::findFlag(bool *buffer, int length) {
     }
     return -1;
 }
-
+/*Converte uma String em um array de de bits já os inserindo no buffer*/
 void Device::byteToBit(std::string &msg) {
     int dataLength = msg.length();
     send_buffer->length = dataLength * CHAR_LENGTH;
@@ -297,6 +333,8 @@ void Device::byteToBit(std::string &msg) {
         }
     }
 }
+
+//Simulação da Camada Física, inserindo erros nos dados transmitidos
 void Device::PhysicalLayerSimulation() {
     bool changedBuffer[BUFFER_LENGTH];
     for (int i = 0; i <= send_buffer->length; i++) {
@@ -306,6 +344,8 @@ void Device::PhysicalLayerSimulation() {
         }
     }
 }
+
+/*Metodo que calcula o CRC de um conjunto de dados uma vez que seu tamanho é conhecido*/
 void Device::calculateCRC(bool *buffer, int length, bool *CRC_p) {
     bool result[length + 32];  //array utilizado para operações de calculo do CRC
     //Startando array de calculo do CRC
@@ -340,11 +380,9 @@ void Device::calculateCRC(bool *buffer, int length, bool *CRC_p) {
         CRC_p[i] = result[length + i];
     }
 }
-//11111111111111111101111101011111
-void Device::insertCRC() {
-    /*     bool *CRC;
-    calculateCRC(send_buffer->buffer_data, send_buffer->length, CRC); */
 
+//Metodo que pega o CRC calculado da memoria e o insere no nosso buffer de envio
+void Device::insertCRC() {
     //Adicionando o CRC no BUffer da Mensagem
     for (int i = 0; i < CRC_SIZE; i++) {
         send_buffer->buffer_data[send_buffer->length + i] = this->CRC[i];
@@ -389,17 +427,19 @@ int Device::countBits(bool *data, int length) {
     }
     return count;
 }
+//Remove o bit de paridade do buffer de recepção
 void Device::removeParity() {
     recv_buffer->buffer_data[recv_buffer->length] = 0;
     recv_buffer->length--;
     return;
 }
-
+//Insere o but de paridade previamente calculado no buffer de envio
 void Device::insertParity() {
     send_buffer->buffer_data[send_buffer->length] = this->parity;
     send_buffer->length += 1;
     return;
 }
+//Retorna o conteudo do buffer
 bool *Device::getBuffer() {
     return this->send_buffer->buffer_data;
 }
