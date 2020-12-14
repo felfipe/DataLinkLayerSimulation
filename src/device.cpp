@@ -174,11 +174,11 @@ void Device::recvData() {
                 bitToChar(this->recv_buffer, data_char);
                 std::cout << "PAYLOAD: " << data_char << std::endl;
             } else {
-                std::cout << "\033[1;37m[ERROR] CRC IS NOT VALID\033[0m";
+                std::cout << "\033[1;37m[ERROR] CRC IS NOT VALID\033[0m" << std::endl;
                 // ERRO
             }
         } else {
-            std::cout << "\033[1;37m[ERROR] PARITY IS NOT VALID\033[0m";
+            std::cout << "\033[1;37m[ERROR] PARITY IS NOT VALID\033[0m" << std::endl;
             // ERRO
         }
     }

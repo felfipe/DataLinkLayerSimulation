@@ -17,6 +17,7 @@ void socketHandler::setUpClientMode(int PORT) {
 
     if (cli_Fd == -1) {
         std::cout << "[ERROR] Failed to create socket!" << std::endl;
+        exit(0);
         return;
     }
 
@@ -25,10 +26,12 @@ void socketHandler::setUpClientMode(int PORT) {
 
     if (inet_pton(AF_INET, ip_address, &server.sin_addr) <= 0) {
         std::cout << "[ERROR] Invalid Address" << std::endl;
+        exit(0);
         return;
     }
     if (connect(cli_Fd, (struct sockaddr *)&server, sizeof(server))) {  // try to connect to server
         std::cout << "[ERROR] Connection Failed" << std::endl;
+        exit(0);
         return;
     }
     return;
@@ -39,6 +42,7 @@ void socketHandler::setUpServerMode(int PORT) {
     socketFd = socket(AF_INET, SOCK_STREAM, 0);
     if (socketFd == -1) {
         std::cout << "[ERROR] Failed to create socket!" << std::endl;
+        exit(0);
         return;
     }
     server.sin_family = AF_INET;
@@ -47,6 +51,7 @@ void socketHandler::setUpServerMode(int PORT) {
     memset(&server.sin_zero, 0, sizeof(server.sin_zero));
     if (bind(socketFd, (struct sockaddr *)&server, sizeof(server)) < 0) {
         std::cout << "[ERROR] Failed to bind!" << std::endl;
+        exit(0);
         return;
     }
 
@@ -67,7 +72,12 @@ void socketHandler::setUpServerMode(int PORT) {
 
 void socketHandler::sendSocket(bool *message, int length) {
     send(this->cli_Fd, message, length * sizeof(bool), 0);
+    return;
 }
 void socketHandler::recvSocket(bool *message, int &length) {
-    length = recv(this->cli_Fd, message, BUFFER_LENGTH * sizeof(bool), 0);
+    if (!(length = recv(this->cli_Fd, message, BUFFER_LENGTH * sizeof(bool), 0))) {
+        std::cout << "[ERROR] DISCONECTED!";
+        exit(0);
+    }
+    return;
 }
